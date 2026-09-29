@@ -1,0 +1,39 @@
+[project]
+name = "CripakAD"
+version = "0.1.0"
+description = "Приложение для шифрования Word/Excel/JPG файлов"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+
+dependencies = [
+    "PyQt6>=6.6,<7",
+    "cryptography>=42",
+    "keyring>=25",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-qt>=4.4",
+    "pytest-cov>=5",
+    "pytest-mock>=3.12",
+    "pytest-xdist>=3.5",
+]
+build = [
+    "pyinstaller>=6",
+]
+
+[project.scripts]
+crypt-app = "crypt_app.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra --strict-markers"
