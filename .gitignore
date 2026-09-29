@@ -1,5 +1,7 @@
 # created by virtualenv automatically
 /.venv
+/.idea
 /tests/fixtures
+/src/cripak.egg-info
 Добавление_зависимостей_в_pyproject.toml
 Порядок написания программы
