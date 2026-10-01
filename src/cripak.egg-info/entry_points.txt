@@ -1,0 +1,2 @@
+[console_scripts]
+crypt-app = crypt_app.__main__:main

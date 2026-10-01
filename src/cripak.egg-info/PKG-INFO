@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: cripak
+Version: 0.1.0
+Summary: Приложение для шифрования Word/Excel/JPG файлов
+Requires-Python: <3.13,>=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: PyQt6<7,>=6.6
+Requires-Dist: cryptography>=42
+Requires-Dist: keyring>=25
