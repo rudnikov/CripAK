@@ -16,6 +16,7 @@ def encrypt_file(src: Path, dst: Path, password: str, progress_cb: Optional[Call
     :raises FileNotFoundError: если src не существует или dst в несуществующей папке
     :raises PermissionError: если нет прав на чтение/запись
     """
+
     blob_file = src.read_bytes()
     encoding_blob_file = encrypt_bytes(blob_file, password)
     dst.write_bytes(encoding_blob_file)
@@ -36,6 +37,7 @@ def decrypt_file(src: Path, dst: Path, password: str, progress_cb: Optional[Call
     :raises WrongPasswordError: если пароль неверный или данные повреждены
     :raises PermissionError: если нет прав на чтение/запись
     """
+
     blob_encoding_file = src.read_bytes()
     decoding_blob_file = decrypt_bytes(blob_encoding_file, password)
     dst.write_bytes(decoding_blob_file)

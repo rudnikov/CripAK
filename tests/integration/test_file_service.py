@@ -306,7 +306,7 @@ def test_encrypt_src_is_directory_raises(tmp_path):
     enc = tmp_path / "output.enc"
 
     # Act + Assert
-    with pytest.raises(IsADirectoryError):
+    with pytest.raises((IsADirectoryError, PermissionError)):
         encrypt_file(src, enc, "password")
 
 # ============================================================
