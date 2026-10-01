@@ -211,4 +211,259 @@ def test_progress_callback_called(tmp_path):
     assert all(0 <= v <= 100 for v in progress_values), \
         "Все значения прогресса должны быть в диапазоне 0–100"
 
+# ============================================================
+# Тест 11. src не существует → FileNotFoundError
+# ============================================================
+
+def test_encrypt_missing_source_raises(tmp_path):
+    """
+    Проверяет, что encrypt_file бросает FileNotFoundError,
+    если исходный файл не существует.
+
+    Сценарий:
+        1. Указываем src, которого нет на диске.
+        2. Пытаемся зашифровать.
+        3. Ожидаем FileNotFoundError.
+
+    Проверяет:
+        - функция НЕ создаёт пустой src «на лету»;
+        - выходной файл НЕ создаётся при ошибке;
+        - пользователь получает понятную ошибку, а не молчаливый сбой.
+
+    Тип: обработка ошибок ввода-вывода.
+    """
+    # Arrange
+    src = tmp_path / "does_not_exist.bin"        # файла нет
+    enc = tmp_path / "output.enc"
+
+    # Act + Assert
+    with pytest.raises(FileNotFoundError):
+        encrypt_file(src, enc, "password")
+
+    # Дополнительно: выходной файл не должен появиться
+    assert not enc.exists(), "При ошибке выходной файл не должен создаваться"
+
+# ============================================================
+# Тест 12. dst в несуществующей директории → FileNotFoundError
+# ============================================================
+
+def test_encrypt_dst_in_missing_directory_raises(tmp_path):
+    """
+    Проверяет, что encrypt_file не создаёт родительские директории
+    автоматически — вместо этого падает с FileNotFoundError.
+
+    Сценарий:
+        1. Создаём валидный src.
+        2. Указываем dst в несуществующей поддиректории.
+        3. Ожидаем FileNotFoundError.
+
+    Проверяет:
+        - file_service НЕ занимается созданием директорий;
+        - ответственность за создание папок — на вызывающем коде
+          (например, dst.parent.mkdir(parents=True, exist_ok=True));
+        - ошибка очевидна и не маскируется.
+
+    Тип: контракт — границы ответственности модуля.
+    """
+    # Arrange
+    src = tmp_path / "input.bin"
+    src.write_bytes(b"data")
+
+    dst = tmp_path / "nonexistent_dir" / "output.enc"   # папки не существует
+
+    # Act + Assert
+    with pytest.raises(FileNotFoundError):
+        encrypt_file(src, dst, "password")
+
+    # Дополнительно: поддиректория не должна была создаться
+    assert not dst.parent.exists(), "file_service не должен создавать директории"
+
+# ============================================================
+# Тест 13. src — директория → IsADirectoryError
+# ============================================================
+
+def test_encrypt_src_is_directory_raises(tmp_path):
+    """
+    Проверяет, что encrypt_file бросает IsADirectoryError,
+    если src — это директория, а не файл.
+
+    Сценарий:
+        1. Создаём директорию с именем, похожим на файл.
+        2. Пытаемся зашифровать её как файл.
+        3. Ожидаем IsADirectoryError.
+
+    Проверяет:
+        - функция различает файлы и директории;
+        - ошибка очевидна (не пытается читать содержимое папки как байты);
+        - пользователь получает понятное сообщение.
+
+    Тип: обработка ошибочного ввода.
+    """
+    # Arrange
+    src = tmp_path / "some_dir"
+    src.mkdir()                                  # это папка, не файл
+
+    enc = tmp_path / "output.enc"
+
+    # Act + Assert
+    with pytest.raises(IsADirectoryError):
+        encrypt_file(src, enc, "password")
+
+# ============================================================
+# Тест 14. encrypt_file перезаписывает существующий dst
+# ============================================================
+
+def test_encrypt_overwrites_existing_dst(tmp_path):
+    """
+    Проверяет, что encrypt_file перезаписывает существующий dst,
+    а не падает с ошибкой.
+
+    Сценарий:
+        1. Создаём src.
+        2. Создаём dst с произвольным старым содержимым.
+        3. Шифруем src → dst.
+        4. Убеждаемся, что старое содержимое dst затёрто.
+
+    Проверяет:
+        - поведение по умолчанию — перезапись (не ошибка);
+        - вызывающий код может перезаписать старый файл новым;
+        - не остаётся «мусора» от предыдущего содержимого.
+
+    Тип: контракт поведения по умолчанию.
+    """
+    # Arrange
+    src = tmp_path / "input.bin"
+    src.write_bytes(b"new data")
+
+    dst = tmp_path / "output.enc"
+    dst.write_bytes(b"old content")              # уже есть файл
+
+    # Act
+    encrypt_file(src, dst, "password")
+
+    # Assert
+    assert dst.read_bytes() != b"old content", "Старое содержимое должно быть затёрто"
+    assert dst.read_bytes() != b"new data", "Содержимое dst должно быть зашифровано"
+
+# ============================================================
+# Тест 15. Roundtrip на пустом файле (0 байт)
+# ============================================================
+
+def test_roundtrip_empty_file(tmp_path):
+    """
+    Проверяет, что шифрование и дешифрование работают на пустом файле.
+
+    Сценарий:
+        1. Создаём src с 0 байт.
+        2. Шифруем → .enc.
+        3. Расшифровываем → restored.
+        4. Убеждаемся, что restored тоже 0 байт.
+
+    Проверяет:
+        - граничный случай 0 байт;
+        - crypto корректно обрабатывает пустые данные;
+        - file_service не падает на пустых файлах;
+        - нет «фантомных» байтов в результате (например, из-за заголовка).
+
+    Тип: граничный случай.
+    """
+    # Arrange
+    src = tmp_path / "empty.bin"
+    src.write_bytes(b"")
+
+    enc = tmp_path / "empty.enc"
+    dec = tmp_path / "empty_restored.bin"
+
+    # Act
+    encrypt_file(src, enc, "password")
+    decrypt_file(enc, dec, "password")
+
+    # Assert
+    assert enc.exists(), "Зашифрованный файл должен быть создан"
+    assert dec.exists(), "Расшифрованный файл должен быть создан"
+    assert enc.read_bytes() != b"", "Шифротекст не может быть пустым (есть заголовок)"
+    assert dec.read_bytes() == b"", "Расшифровка пустого файла должна вернуть пустой файл"
+
+# ============================================================
+# Тест 16. Расшифровка повреждённого файла → WrongPasswordError
+# ============================================================
+
+def test_decrypt_corrupted_file_raises(tmp_path):
+    """
+    Проверяет, что decrypt_file бросает WrongPasswordError,
+    если байты зашифрованного файла повреждены.
+
+    Сценарий:
+        1. Шифруем файл нормально.
+        2. Портим один байт в .enc-файле.
+        3. Пытаемся расшифровать.
+        4. Ожидаем WrongPasswordError.
+
+    Проверяет:
+        - AES-GCM обнаруживает подмену байтов (аутентификация работает);
+        - повреждённые данные не превращаются в «мусор на выходе»;
+        - ошибка преобразуется в доменное исключение WrongPasswordError.
+
+    Тип: безопасность, целостность данных.
+    """
+    # Arrange
+    src = tmp_path / "input.bin"
+    src.write_bytes(b"secret data")
+
+    enc = tmp_path / "input.enc"
+    encrypt_file(src, enc, "password")
+
+    # Портим последний байт шифротекста
+    corrupted = bytearray(enc.read_bytes())
+    corrupted[-1] ^= 0xFF
+    enc.write_bytes(bytes(corrupted))
+
+    dec = tmp_path / "output.bin"
+
+    # Act + Assert
+    with pytest.raises(WrongPasswordError):
+        decrypt_file(enc, dec, "password")
+
+    assert not dec.exists(), "При ошибке выходной файл не должен создаваться"
+
+# ============================================================
+# Тест 17. decrypt_file не изменяет и не удаляет src
+# ============================================================
+
+def test_decrypt_does_not_modify_source(tmp_path):
+    """
+    Проверяет, что decrypt_file не изменяет и не удаляет src (.enc-файл).
+
+    Сценарий:
+        1. Шифруем файл → .enc.
+        2. Запоминаем содержимое .enc.
+        3. Расшифровываем.
+        4. Убеждаемся: .enc существует и его байты не изменились.
+
+    Проверяет:
+        - decrypt_file не портит зашифрованный файл;
+        - при ошибке можно повторить попытку (файл .enc остался валидным);
+        - симметрия с encrypt_file — тоже не трогает src.
+
+    Тип: свойство безопасности данных.
+    """
+    # Arrange
+    src = tmp_path / "input.bin"
+    src.write_bytes(b"important data")
+
+    enc = tmp_path / "input.enc"
+    encrypt_file(src, enc, "password")
+
+    original_enc_bytes = enc.read_bytes()
+
+    dec = tmp_path / "output.bin"
+
+    # Act
+    decrypt_file(enc, dec, "password")
+
+    # Assert
+    assert enc.exists(), "Зашифрованный файл не должен быть удалён"
+    assert enc.read_bytes() == original_enc_bytes, "Зашифрованный файл не должен быть изменён"
+    assert dec.read_bytes() == b"important data", "Расшифровка должна дать исходные данные"
+
 
